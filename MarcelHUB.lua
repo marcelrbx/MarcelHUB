@@ -89,7 +89,7 @@ end
 -- Boost con Taser hacia la base
 local function taserBoostToGoal(goalCFrame)
     local char = player.Character or player.CharacterAdded:Wait()
-    local hrp = char:WaitForChild("HumanoidRootPart")
+    local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
     notify("Iniciando recorrido hacia la base...")
@@ -99,12 +99,11 @@ local function taserBoostToGoal(goalCFrame)
     heartbeatConn = RunService.Heartbeat:Connect(function()
         if not hrp or reached then
             if heartbeatConn then heartbeatConn:Disconnect() end
-            notify("Recorrido finalizado")
             return
         end
 
-        local vectorToGoal = goalCFrame.Position - hrp.Position
-        local distance = vectorToGoal.Magnitude
+        local direction = (goalCFrame.Position - hrp.Position).Unit
+        local distance = (goalCFrame.Position - hrp.Position).Magnitude
 
         if distance < 5 then
             reached = true
@@ -113,12 +112,9 @@ local function taserBoostToGoal(goalCFrame)
             return
         end
 
-        local direction = vectorToGoal.Unit
-        local moveVector = direction * math.min(distance, 25)
-        hrp.CFrame = CFrame.new(hrp.Position + moveVector, goalCFrame.Position)
-
-        -- Activar Taser cada tick
+        -- Activar Taser y mover en dirección a la base
         REUseItem:FireServer(hrp)
+        hrp.CFrame = hrp.CFrame + direction * 15
     end)
 end
 
