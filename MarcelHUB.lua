@@ -1,191 +1,178 @@
--- Bersihkan GUI lama
-pcall(function()
-	game.CoreGui:FindFirstChild("StealHelper"):Destroy()
-end)
+-- Hapus GUI lama jika ada
+pcall(function() game.CoreGui:FindFirstChild("PremiumDeliveryGUI"):Destroy() end)
 
--- GUI Utama
-local gui = Instance.new("ScreenGui", game.CoreGui)
-gui.Name = "StealHelper"
+-- Ambil service dan data pemain
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+local plots = workspace:WaitForChild("Plots")
+
+-- GUI Setup
+local gui = Instance.new("ScreenGui", CoreGui)
+gui.Name = "PremiumDeliveryGUI"
 gui.ResetOnSpawn = false
 
--- Frame (ukuran 20% lebih kecil)
-local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.new(0, 176, 0, 104)
-frame.Position = UDim2.new(0.1, 0, 0.1, 0)
-frame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+local frame = Instance.new("Frame")
+frame.Name = "MainFrame"
+frame.Size = UDim2.new(0, 192, 0, 88) -- 20% lebih kecil dari 240x110
+frame.Position = UDim2.new(0, 30, 0.4, 0)
+frame.BackgroundColor3 = Color3.fromRGB(24, 24, 26)
 frame.BorderSizePixel = 0
+frame.BackgroundTransparency = 0.02
+frame.Parent = gui
 frame.Active = true
 frame.Draggable = true
 
--- UI Corner
-local corner = Instance.new("UICorner", frame)
-corner.CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
 
--- Judul
+local stroke = Instance.new("UIStroke", frame)
+stroke.Color = Color3.fromRGB(0, 180, 255)
+stroke.Thickness = 1.6
+stroke.Transparency = 0.1
+
 local title = Instance.new("TextLabel", frame)
-title.Size = UDim2.new(1, 0, 0, 25)
+title.Name = "TitleLabel"
+title.Size = UDim2.new(1, 0, 0, 24)
 title.Position = UDim2.new(0, 0, 0, 0)
 title.BackgroundTransparency = 1
-title.Text = "Steal Helper 1"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 16
+title.Text = "Instan Steal"
+title.Font = Enum.Font.GothamBlack
+title.TextColor3 = Color3.fromRGB(230, 230, 230)
+title.TextSize = 17
+title.TextStrokeTransparency = 0.8
 
--- Garis bawah judul
-local garis = Instance.new("Frame", frame)
-garis.Size = UDim2.new(1, -20, 0, 1)
-garis.Position = UDim2.new(0, 10, 0, 25)
-garis.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-garis.BorderSizePixel = 0
+local toggleBtn = Instance.new("TextButton", frame)
+toggleBtn.Name = "ToggleButton"
+toggleBtn.Size = UDim2.new(1, -20, 0, 42)
+toggleBtn.Position = UDim2.new(0, 10, 0, 36)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+toggleBtn.Text = "Start"
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.TextSize = 15
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.BorderSizePixel = 0
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
 
--- 
-local button = Instance.new("TextButton", frame)
-button.Size = UDim2.new(0.90, 0, 0, 34) -- Dibesar 20%
-button.Position = UDim2.new(0.05, 0, 0, 42) -- Rata tengah sempurna
-button.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
-button.TextColor3 = Color3.fromRGB(255, 255, 255)
-button.Font = Enum.Font.GothamSemibold
-button.TextSize = 14
-button.Text = "▶ Start"
-button.AutoButtonColor = false
---
--- UICorner tombol
-local btnCorner = Instance.new("UICorner", button)
-btnCorner.CornerRadius = UDim.new(0, 6)
-
--- Hover effect
-button.MouseEnter:Connect(function()
-	button.BackgroundColor3 = Color3.fromRGB(60, 60, 90)
-end)
-button.MouseLeave:Connect(function()
-	button.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
-end)
-
--- Variabel
+-- Logic
+local speed = 42
+local arrived = false
 local active = false
-local moveConn, touchConn = nil, nil
+local jumpLoop = nil
+local moveConn = nil
 
--- Fungsi cari semua target
-local function getAllTargetParts()
-	local parts = {}
-	local size1 = Vector3.new(13.128019332885742, 17, 0.25)
-	local size2 = Vector3.new(13.128019332885742, 17, 0.25)
-	
-	for _, obj in ipairs(workspace:GetDescendants()) do
-		if obj:IsA("BasePart") and obj.Name == "structure base home" then
-			if (obj.Size - size1).Magnitude < 0.01 or (obj.Size - size2).Magnitude < 0.01 then
-				table.insert(parts, obj)
+local function getClosestHitbox(excludeHitbox, maxDistance)
+	local closest = nil
+	local shortest = maxDistance
+	for _, base in pairs(plots:GetChildren()) do
+		if base:IsA("Model") then
+			local deliveryHitbox = base:FindFirstChild("DeliveryHitbox", true)
+			if deliveryHitbox and deliveryHitbox ~= excludeHitbox then
+				local dist = (humanoidRootPart.Position - deliveryHitbox.Position).Magnitude
+				if dist < shortest then
+					shortest = dist
+					closest = deliveryHitbox
+				end
 			end
 		end
 	end
-	return parts
+	return closest
 end
 
--- Buat part jmj
-local function buatJMJSemua()
-	for _, v in pairs(workspace:GetDescendants()) do
-		if v:IsA("BasePart") and v.Name == "jmj" then
-			v:Destroy()
-		end
-	end
-
-	local targetParts = getAllTargetParts()
-	local jmjParts = {}
-
-	for _, target in ipairs(targetParts) do
-		local jmj = Instance.new("Part", workspace)
-		jmj.Name = "jmj"
-		jmj.Size = Vector3.new(0.5, 20, 70)
-		jmj.Anchored = true
-		jmj.CanCollide = false
-		jmj.Transparency = 1
-		jmj.BrickColor = BrickColor.new("Bright yellow")
-		jmj.Position = target.Position + Vector3.new(0, target.Size.Y / 4 + target.Size.Y / 2, 0) - Vector3.new(0, 0.5, 0)
-		table.insert(jmjParts, jmj)
-	end
-
-	return jmjParts
-end
-
--- Dorong ke part jmj
-local function dorongKeJMJ(jmjParts)
-	local player = game.Players.LocalPlayer
-	local char = player.Character or player.CharacterAdded:Wait()
-	local hrp = char:WaitForChild("HumanoidRootPart")
-	local humanoid = char:WaitForChild("Humanoid")
-
-	local nearestJMJ, shortestDistance = nil, 70
-	for _, jmj in pairs(jmjParts) do
-		local dist = (jmj.Position - hrp.Position).Magnitude
-		if dist < shortestDistance then
-			nearestJMJ = jmj
-			shortestDistance = dist
-		end
-	end
-
-	if not nearestJMJ then return end
-
-	local direction = (nearestJMJ.Position - hrp.Position).Unit
-	local move = true
-	local sudahSentuh = false
-
-	moveConn = game:GetService("RunService").Heartbeat:Connect(function()
-		if not move or not hrp then return end
-		local newVel = direction * 43
-		hrp.Velocity = Vector3.new(newVel.X, hrp.Velocity.Y, newVel.Z)
-	end)
-
-	touchConn = nearestJMJ.Touched:Connect(function(hit)
-		if hit and hit:IsDescendantOf(char) and not sudahSentuh then
-			sudahSentuh = true
-			move = false -- Hentikan gerakan dulu
-
-			task.delay(0.1, function() -- Tunggu 0.1 detik DULU, baru loncat
-				humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-				hrp.Velocity = Vector3.new(0, 160, 0)
-				button.Text = "▶ Start"
-				active = false
-
-				if moveConn then moveConn:Disconnect() end
-				if touchConn then touchConn:Disconnect() end
-
-				for _, p in pairs(workspace:GetDescendants()) do
-					if p:IsA("BasePart") and p.Name == "jmj" then
-						p:Destroy()
-					end
+local function findMyHitbox()
+	for _, base in pairs(plots:GetChildren()) do
+		if base:IsA("Model") then
+			for _, desc in pairs(base:GetDescendants()) do
+				if desc:IsA("TextLabel") and (string.find(desc.Text, player.Name) or string.find(desc.Text, player.DisplayName)) then
+					return base:FindFirstChild("DeliveryHitbox", true)
 				end
-			end)
+			end
 		end
+	end
+end
+
+local function cleanup()
+	arrived = true
+	if jumpLoop then task.cancel(jumpLoop) jumpLoop = nil end
+	if moveConn then moveConn:Disconnect() moveConn = nil end
+	if humanoidRootPart then
+		humanoidRootPart.Velocity = Vector3.zero
+	end
+end
+
+local function runDelivery()
+	local myHitbox = findMyHitbox()
+	if not myHitbox then warn("Tidak menemukan DeliveryHitbox sendiri.") return end
+
+	local closestHitbox = getClosestHitbox(myHitbox, 50)
+	if not closestHitbox then warn("Tidak ada DeliveryHitbox lain dalam 50 studs.") return end
+
+	local currentGoal = closestHitbox.Position + Vector3.new(0, 3, 0)
+	local phase = "ToClosest"
+	arrived = false
+
+	jumpLoop = task.spawn(function()
+		while active and not arrived do
+			if phase == "ToClosest" or phase == "ToMyBase" then
+				humanoidRootPart.Velocity = Vector3.new(humanoidRootPart.Velocity.X, 120, humanoidRootPart.Velocity.Z)
+				task.wait(phase == "ToClosest" and 0.5 or 1.5)
+			else
+				task.wait(0.5)
+			end
+		end
+	end)
+
+	moveConn = RunService.Heartbeat:Connect(function()
+		if not active or arrived then return end
+
+		if (humanoidRootPart.Position - currentGoal).Magnitude < 5 then
+			if phase == "ToClosest" then
+				phase = "ToMyBase"
+				currentGoal = myHitbox.Position + Vector3.new(0, 3, 0)
+			elseif phase == "ToMyBase" then
+				arrived = true
+				cleanup()
+
+				-- Auto Stop
+				active = false
+				toggleBtn.Text = "Start"
+				toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+			end
+			return
+		end
+
+		local direction = (currentGoal - humanoidRootPart.Position).Unit
+		humanoidRootPart.Velocity = Vector3.new(direction.X * speed, humanoidRootPart.Velocity.Y, direction.Z * speed)
 	end)
 end
 
--- Ketika tombol diklik
-button.MouseButton1Click:Connect(function()
-	active = not active
-	button.Text = active and "■ Stop" or "▶ Start"
-
-	if moveConn then moveConn:Disconnect() end
-	if touchConn then touchConn:Disconnect() end
-
-	for _, p in pairs(workspace:GetDescendants()) do
-		if p:IsA("BasePart") and p.Name == "jmj" then
-			p:Destroy()
-		end
+-- Toggle tombol
+toggleBtn.MouseButton1Click:Connect(function()
+	if active then
+		active = false
+		toggleBtn.Text = "Start"
+		toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		cleanup()
+	else
+		if not humanoidRootPart then return warn("Karakter belum siap.") end
+		active = true
+		arrived = false
+		toggleBtn.Text = "Stop"
+		toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
+		runDelivery()
 	end
-
-	if not active then return end
-
-	local jmjParts = buatJMJSemua()
-	dorongKeJMJ(jmjParts)
 end)
 
+-- Dengarkan respawn
+Players.LocalPlayer.CharacterAdded:Connect(function(newChar)
+	character = newChar
+	humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+	cleanup()
 
-
-
-
-task.wait(1) -- beri jeda biar GUI keburu siap
-game:GetService("StarterGui"):SetCore("SendNotification", {
-	Title = "Tips Message!",
-	Text = "For Base Flor 1",
-	Duration = 4
-})
+	if active then
+		task.wait(1)
+		runDelivery()
+	end
+end)
