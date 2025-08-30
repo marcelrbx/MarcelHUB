@@ -1,3 +1,6 @@
+-- Limpia GUI vieja
+pcall(function() game.CoreGui:FindFirstChild("StealHelper"):Destroy() end)
+
 -- Servicios
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -5,41 +8,42 @@ local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 local player = Players.LocalPlayer
 
--- Remotes
+-- Eventos de Taser y Compra
 local RFCoinsShopServiceRequestBuy = ReplicatedStorage.Packages.Net["RF/CoinsShopService/RequestBuy"]
 local REUseItem = ReplicatedStorage.Packages.Net["RE/UseItem"]
 
-local toolName = "Taser Gun"
+-- Variables
+local running = false
 local activePrompts = {}
 local holdDetected = {}
-local running = false
+local toolName = "Taser Gun"
 
--- Equipar Taser Gun
-local function equipTaser()
-    local success, _ = pcall(function()
-        RFCoinsShopServiceRequestBuy:InvokeServer(toolName)
+-- ======================
+-- Funciones
+-- ======================
+
+-- Comprar y equipar Taser Gun
+local function buyAndEquip()
+    local success, result = pcall(function()
+        return RFCoinsShopServiceRequestBuy:InvokeServer(toolName)
     end)
+    if not success then warn("Error al comprar:", result) end
+
     task.wait(0.5)
     local tool = player.Backpack:FindFirstChild(toolName)
-    if tool then
-        player.Character.Humanoid:EquipTool(tool)
-        StarterGui:SetCore("SendNotification", {Title="Taser", Text="Taser equipada", Duration=3})
-    end
+    if tool then player.Character.Humanoid:EquipTool(tool) end
 end
 
--- Usar Taser Gun sobre nosotros mismos para boost
-local function taserBoost()
-    local char = player.Character or player.CharacterAdded:Wait()
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if hrp then
-        REUseItem:FireServer(hrp)
-        -- Movimiento rápido hacia adelante
-        hrp.CFrame = hrp.CFrame + hrp.CFrame.LookVector * 20
-        StarterGui:SetCore("SendNotification", {Title="Taser", Text="Taser activada para boost", Duration=2})
-    end
+-- Notificaciones
+local function notify(msg)
+    StarterGui:SetCore("SendNotification", {
+        Title = "Steal Helper",
+        Text = msg,
+        Duration = 2
+    })
 end
 
--- Detectar prompts de Steal
+-- Detecta prompts de Steal
 local function addPrompt(prompt)
     if prompt:IsA("ProximityPrompt") and prompt.ActionText == "Steal" and not activePrompts[prompt] then
         activePrompts[prompt] = prompt
@@ -47,76 +51,151 @@ local function addPrompt(prompt)
         prompt.Triggered:Connect(function(plr)
             if plr == player then
                 holdDetected[prompt] = true
-                StarterGui:SetCore("SendNotification", {Title="Steal detectado", Text="Activando Taser para recorrido", Duration=3})
-                taserBoost()
+                notify("Prompt de Steal activado!")
             end
         end)
     end
 end
 
--- Escanear zonas del mapa
+-- Buscar prompts en descendientes
+local function scanForPrompts(parent)
+    for _, obj in pairs(parent:GetDescendants()) do
+        addPrompt(obj)
+    end
+end
+
+-- Escanear zonas relevantes
 local function scanZones()
-    for _, zone in pairs({"Plots", "AnimalPodiums", "Base", "Spawn"}) do
-        if workspace:FindFirstChild(zone) then
-            for _, obj in pairs(workspace[zone]:GetDescendants()) do
-                addPrompt(obj)
+    if workspace:FindFirstChild("Plots") then
+        for _, model in pairs(workspace.Plots:GetChildren()) do
+            scanForPrompts(model)
+        end
+    end
+end
+
+-- Encontrar hitbox propia (Base)
+local function findMyHitbox()
+    for _, base in pairs(workspace.Plots:GetChildren()) do
+        if base:IsA("Model") then
+            for _, desc in pairs(base:GetDescendants()) do
+                if desc:IsA("TextLabel") and (string.find(desc.Text, player.Name) or string.find(desc.Text, player.DisplayName)) then
+                    return base:FindFirstChild("DeliveryHitbox", true)
+                end
             end
         end
     end
 end
 
--- Loop principal
+-- Boost con Taser hacia la base
+local function taserBoostToGoal(goalCFrame)
+    local char = player.Character or player.CharacterAdded:Wait()
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    notify("Iniciando recorrido hacia la base...")
+
+    local reached = false
+    local heartbeatConn
+    heartbeatConn = RunService.Heartbeat:Connect(function()
+        if not hrp or reached then
+            if heartbeatConn then heartbeatConn:Disconnect() end
+            return
+        end
+
+        local direction = (goalCFrame.Position - hrp.Position).Unit
+        local distance = (goalCFrame.Position - hrp.Position).Magnitude
+
+        if distance < 5 then
+            reached = true
+            notify("¡Llegaste a la base!")
+            if heartbeatConn then heartbeatConn:Disconnect() end
+            return
+        end
+
+        -- Activar Taser y mover en dirección a la base
+        REUseItem:FireServer(hrp)
+        hrp.CFrame = hrp.CFrame + direction * 15
+    end)
+end
+
+-- ======================
+-- Loop Principal
+-- ======================
 RunService.Heartbeat:Connect(function()
     if running then
         scanZones()
+        for _, prompt in pairs(activePrompts) do
+            if prompt and prompt.Parent then
+                if prompt:IsHeld() and not holdDetected[prompt] then
+                    local progress = prompt:GetHoldProgress()
+                    if progress >= 1 - (0.3 / prompt.HoldDuration) then
+                        holdDetected[prompt] = true
+                        notify("Steal iniciado! Activando Taser...")
+                        local myBase = findMyHitbox()
+                        if myBase then
+                            taserBoostToGoal(myBase.CFrame + Vector3.new(0,3,0))
+                        else
+                            notify("No se encontró la base!")
+                        end
+                    end
+                elseif not prompt:IsHeld() then
+                    holdDetected[prompt] = false
+                end
+            end
+        end
     end
 end)
 
--- Iniciar / Detener
+-- ======================
+-- Funciones para iniciar/detener
+-- ======================
 local function startTaser()
     running = true
     activePrompts = {}
     holdDetected = {}
-    equipTaser()
+    buyAndEquip()
+    notify("Taser Helper ON")
 end
 
 local function stopTaser()
     running = false
     activePrompts = {}
     holdDetected = {}
+    notify("Taser Helper OFF")
 end
 
--- GUI simple toggle
-local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-screenGui.Name = "TaserToggleGUI"
-screenGui.ResetOnSpawn = false
+-- ======================
+-- GUI
+-- ======================
+local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+gui.Name = "StealHelper"
+gui.ResetOnSpawn = false
 
-local frame = Instance.new("Frame", screenGui)
-frame.Size = UDim2.new(0, 150, 0, 50)
-frame.Position = UDim2.new(0.05, 0, 0.3, 0)
-frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 220, 0, 50)
+frame.Position = UDim2.new(0.05,0,0.3,0)
+frame.BackgroundColor3 = Color3.fromRGB(30,30,40)
 frame.BorderSizePixel = 0
-frame.BackgroundTransparency = 0.2
-Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0,12)
 
-local toggleButton = Instance.new("TextButton", frame)
-toggleButton.Size = UDim2.new(1, -10, 1, -10)
-toggleButton.Position = UDim2.new(0, 5, 0, 5)
-toggleButton.Text = "🔴 OFF"
-toggleButton.Font = Enum.Font.GothamBold
-toggleButton.TextSize = 20
-toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleButton.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
-Instance.new("UICorner", toggleButton).CornerRadius = UDim.new(0, 10)
+local button = Instance.new("TextButton", frame)
+button.Size = UDim2.new(1, -10, 1, -10)
+button.Position = UDim2.new(0,5,0,5)
+button.Text = "🔴 OFF"
+button.Font = Enum.Font.GothamBold
+button.TextSize = 18
+button.TextColor3 = Color3.fromRGB(255,255,255)
+button.BackgroundColor3 = Color3.fromRGB(120,0,0)
+Instance.new("UICorner", button).CornerRadius = UDim.new(0,10)
 
-toggleButton.MouseButton1Click:Connect(function()
+button.MouseButton1Click:Connect(function()
     if running then
         stopTaser()
-        toggleButton.Text = "🔴 OFF"
-        toggleButton.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
+        button.Text = "🔴 OFF"
+        button.BackgroundColor3 = Color3.fromRGB(120,0,0)
     else
         startTaser()
-        toggleButton.Text = "🟢 ON"
-        toggleButton.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+        button.Text = "🟢 ON"
+        button.BackgroundColor3 = Color3.fromRGB(0,150,0)
     end
 end)
