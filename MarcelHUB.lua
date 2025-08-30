@@ -1,101 +1,112 @@
---// Servicios
-local TweenService = game:GetService("TweenService")
+-- ⚡ WeroHub GUI con Teleport Dash corregido
 local Players = game:GetService("Players")
-local player = Players.LocalPlayer
-local uis = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
 
---// Configuración
-local activated = false -- estado del hack
+-- === GUI Principal ===
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Parent = game:GetService("CoreGui")
 
---// Función para moverse a la base
+-- Burbuja flotante
+local Bubble = Instance.new("TextButton")
+Bubble.Size = UDim2.new(0, 60, 0, 60)
+Bubble.Position = UDim2.new(0, 100, 0, 100)
+Bubble.Text = "⚡"
+Bubble.TextSize = 30
+Bubble.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+Bubble.TextColor3 = Color3.fromRGB(255, 255, 255)
+Bubble.Parent = ScreenGui
+Bubble.Active = true
+Bubble.Draggable = true  -- ✅ arrastrable
+
+-- Frame del menú
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 250, 0, 150)
+MainFrame.Position = UDim2.new(0.5, -125, 0.5, -75)
+MainFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+MainFrame.Visible = false
+MainFrame.Parent = ScreenGui
+MainFrame.Active = true
+MainFrame.Draggable = true  -- ✅ arrastrable
+
+-- Barra superior (gris)
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1, 0, 0, 30)
+TopBar.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+TopBar.Parent = MainFrame
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 1, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "⚡ WeroHub"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Parent = TopBar
+
+-- Botón Activar / Desactivar
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(0.8, 0, 0.3, 0)
+ToggleButton.Position = UDim2.new(0.1, 0, 0.5, 0)
+ToggleButton.Text = "Activar"
+ToggleButton.TextSize = 20
+ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.Parent = MainFrame
+
+-- === Variables ===
+local enabled = false
+
+-- === Función de dash a base ===
 local function dashToBase()
-    local char = player.Character or player.CharacterAdded:Wait()
+    local char = LocalPlayer.Character
+    if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
-    -- 🔹 Cambia esto por el objeto que sea tu base
-    local basePart = workspace:WaitForChild("BaseTeleport"):WaitForChild("Part")
+    -- 🔹 Ajusta aquí tu base
+    local basePart = workspace:FindFirstChild("BaseTeleport") or workspace:FindFirstChild("Base") 
+    if not basePart then return end
     local targetPos = basePart.Position + Vector3.new(0, 5, 0)
 
-    local tweenInfo = TweenInfo.new(
-        0.4, -- duración del dash
-        Enum.EasingStyle.Linear,
-        Enum.EasingDirection.Out
-    )
+    -- Movimiento interpolado
+    local steps = 20
+    local waitTime = 0.01
+    local startPos = hrp.Position
 
-    local tween = TweenService:Create(hrp, tweenInfo, {CFrame = CFrame.new(targetPos)})
-    tween:Play()
+    for i = 1, steps do
+        local alpha = i / steps
+        local newPos = startPos:Lerp(targetPos, alpha)
+        hrp.CFrame = CFrame.new(newPos)
+        task.wait(waitTime)
+    end
 end
 
---// Función principal al robar
-local function useTaserAndDash()
-    if not activated then return end
+-- === Función al usar Taser ===
+local function useTaser()
+    if not enabled then return end
+    -- Aquí deberías detectar cuando usas el taser
     dashToBase()
 end
 
--- Aquí pones tu evento que detecta cuando robas el brainrot
--- Ejemplo (ajusta al evento real del juego):
--- workspace.BrainrotSteal.Event.OnClientEvent:Connect(useTaserAndDash)
-
---------------------------------------------------------------------
---// INTERFAZ
---------------------------------------------------------------------
-local ScreenGui = Instance.new("ScreenGui")
-local Bubble = Instance.new("TextButton")
-local MenuFrame = Instance.new("Frame")
-local ToggleButton = Instance.new("TextButton")
-
-ScreenGui.Parent = game:GetService("CoreGui")
-
--- Burbuja roja
-Bubble.Size = UDim2.new(0, 50, 0, 50)
-Bubble.Position = UDim2.new(0, 20, 0.5, -25)
-Bubble.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-Bubble.Text = "⚙️"
-Bubble.TextScaled = true
-Bubble.TextColor3 = Color3.new(1,1,1)
-Bubble.Parent = ScreenGui
-Bubble.ZIndex = 2
-Bubble.AutoButtonColor = true
-Bubble.Name = "WeroBubble"
-Bubble.BackgroundTransparency = 0.2
-Bubble.BorderSizePixel = 0
-Bubble.Visible = true
-
--- Frame del menú
-MenuFrame.Size = UDim2.new(0, 200, 0, 120)
-MenuFrame.Position = UDim2.new(0, 80, 0.5, -60)
-MenuFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-MenuFrame.BorderSizePixel = 0
-MenuFrame.Visible = false
-MenuFrame.Parent = ScreenGui
-
--- Botón de activar/desactivar
-ToggleButton.Size = UDim2.new(0.8, 0, 0.3, 0)
-ToggleButton.Position = UDim2.new(0.1, 0, 0.35, 0)
-ToggleButton.Text = "Activar"
-ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 0) -- verde
-ToggleButton.TextColor3 = Color3.new(1,1,1)
-ToggleButton.TextScaled = true
-ToggleButton.Parent = MenuFrame
-ToggleButton.BorderSizePixel = 0
-
---------------------------------------------------------------------
---// Lógica de UI
---------------------------------------------------------------------
--- Mostrar/ocultar menú al hacer click en la burbuja
+-- === Eventos de UI ===
 Bubble.MouseButton1Click:Connect(function()
-    MenuFrame.Visible = not MenuFrame.Visible
+    MainFrame.Visible = not MainFrame.Visible
 end)
 
--- Cambiar estado al presionar botón
 ToggleButton.MouseButton1Click:Connect(function()
-    activated = not activated
-    if activated then
+    enabled = not enabled
+    if enabled then
         ToggleButton.Text = "Desactivar"
-        ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0) -- rojo
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
     else
         ToggleButton.Text = "Activar"
-        ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 0) -- verde
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+    end
+end)
+
+-- Simulación: cuando presiones la tecla "T" ejecuta el dash
+game:GetService("UserInputService").InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.T then
+        useTaser()
     end
 end)
