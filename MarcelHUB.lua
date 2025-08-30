@@ -1,148 +1,148 @@
--- Hapus GUI lama jika ada
-pcall(function()
-	game.CoreGui:FindFirstChild("StealHelper"):Destroy()
-end)
-
--- Ambil service
+-- Services
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local player = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local StarterGui = game:GetService("StarterGui")
 
--- Net events/tools
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart")
+local humanoid = character:WaitForChild("Humanoid")
+
+-- Remotes
 local RFCoinsShopServiceRequestBuy = ReplicatedStorage.Packages.Net["RF/CoinsShopService/RequestBuy"]
 local REUseItem = ReplicatedStorage.Packages.Net["RE/UseItem"]
-local toolName = "Taser Gun"
 
--- Estado
+-- Variables
 local running = false
+local toolName = "Taser Gun"
 local activePrompts = {}
-local holdDetected = {}
 
--- GUI Utama
-local gui = Instance.new("ScreenGui", game.CoreGui)
-gui.Name = "StealHelper"
-gui.ResetOnSpawn = false
+-- 🔹 Notificación
+local function notify(title, text)
+    StarterGui:SetCore("SendNotification", {
+        Title = title,
+        Text = text,
+        Duration = 3
+    })
+end
 
-local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.new(0, 240, 0, 220)
-frame.Position = UDim2.new(0.5, -120, 0.5, -110)
-frame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-frame.BorderSizePixel = 0
-frame.Active = true
-frame.Draggable = true
-Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 20)
-
-local title = Instance.new("TextLabel", frame)
-title.Size = UDim2.new(1, -20, 0, 40)
-title.Position = UDim2.new(0, 10, 0, 4)
-title.Text = "Steal Helper | Taser"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.BackgroundTransparency = 1
-title.Font = Enum.Font.GothamBold
-title.TextSize = 22
-title.TextXAlignment = Enum.TextXAlignment.Left
-
--- Funciones del Taser
+-- 🔹 Comprar y equipar Taser Gun
 local function buyAndEquip()
     local success, result = pcall(function()
         return RFCoinsShopServiceRequestBuy:InvokeServer(toolName)
     end)
-    if not success then warn("Error al comprar:", result) end
-
+    if not success then
+        warn("Error al comprar:", result)
+        notify("Error", "No se pudo comprar la Taser Gun")
+        return
+    end
     task.wait(0.5)
     local tool = player.Backpack:FindFirstChild(toolName)
-    if tool then player.Character.Humanoid:EquipTool(tool) end
+    if tool then
+        player.Character.Humanoid:EquipTool(tool)
+        notify("Taser Gun", "Taser Gun equipada")
+    else
+        notify("Error", "Taser Gun no encontrada")
+    end
 end
 
-local function useTaserAndTeleport()
+-- 🔹 Función de usar Taser y teletransportar
+local function useTaserAt(targetCFrame)
     local char = player.Character or player.CharacterAdded:Wait()
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if hrp then
+        -- Disparar Taser
         REUseItem:FireServer(hrp)
-        hrp.CFrame = hrp.CFrame + hrp.CFrame.LookVector * 20
+        -- Teletransportar cerca del objetivo
+        hrp.CFrame = targetCFrame + Vector3.new(0, 3, 0)
     end
 end
 
-local function addPrompt(prompt)
-    if prompt:IsA("ProximityPrompt") and prompt.ActionText == "Steal" and not activePrompts[prompt] then
-        activePrompts[prompt] = prompt
-        holdDetected[prompt] = false
-        prompt.Triggered:Connect(function(plr)
-            if plr == player then holdDetected[prompt] = true end
-        end)
-    end
-end
-
-local function scanForPrompts(parent)
+-- 🔹 Escanear prompts en un parent
+local function scanPrompts(parent)
     for _, obj in pairs(parent:GetDescendants()) do
-        addPrompt(obj)
+        if obj:IsA("ProximityPrompt") and obj.ActionText == "Steal" and not activePrompts[obj] then
+            activePrompts[obj] = true
+            notify("Prompt Detectado", obj:GetFullName())
+        end
     end
 end
 
-local function scanSpecificZones()
+-- 🔹 Escanear zonas típicas
+local function scanZones()
     if workspace:FindFirstChild("Plots") then
-        for _, model in pairs(workspace.Plots:GetChildren()) do
-            scanForPrompts(model)
-        end
+        for _, model in pairs(workspace.Plots:GetChildren()) do scanPrompts(model) end
     end
     if workspace:FindFirstChild("AnimalPodiums") then
-        for _, model in pairs(workspace.AnimalPodiums:GetChildren()) do
-            scanForPrompts(model)
-        end
+        for _, model in pairs(workspace.AnimalPodiums:GetChildren()) do scanPrompts(model) end
     end
-    if workspace:FindFirstChild("Base") then scanForPrompts(workspace.Base) end
-    if workspace:FindFirstChild("Spawn") then scanForPrompts(workspace.Spawn) end
+    if workspace:FindFirstChild("Base") then scanPrompts(workspace.Base) end
+    if workspace:FindFirstChild("Spawn") then scanPrompts(workspace.Spawn) end
 end
 
+-- 🔹 Loop principal
 RunService.Heartbeat:Connect(function()
     if running then
-        scanSpecificZones()
-        for _, prompt in pairs(activePrompts) do
+        scanZones()
+        for prompt, _ in pairs(activePrompts) do
             if prompt and prompt.Parent then
-                if prompt:IsHeld() and not holdDetected[prompt] then
-                    local progress = prompt:GetHoldProgress()
-                    if progress >= 1 - (0.3 / prompt.HoldDuration) then
-                        holdDetected[prompt] = true
-                        useTaserAndTeleport()
-                    end
-                elseif not prompt:IsHeld() then
-                    holdDetected[prompt] = false
+                local targetCFrame = prompt.Parent:IsA("BasePart") and prompt.Parent.CFrame or prompt.Parent.PrimaryPart and prompt.Parent.PrimaryPart.CFrame
+                if targetCFrame then
+                    useTaserAt(targetCFrame)
+                    notify("Steal Activado", "Prompt usado: "..prompt:GetFullName())
+                    activePrompts[prompt] = nil
+                    task.wait(0.5) -- Pequeña pausa entre cada prompt
                 end
             end
         end
     end
 end)
 
+-- 🔹 Funciones de inicio/parada
 local function startTaser()
     running = true
     activePrompts = {}
-    holdDetected = {}
     buyAndEquip()
+    notify("Taser Helper", "Iniciado")
 end
 
 local function stopTaser()
     running = false
     activePrompts = {}
-    holdDetected = {}
+    notify("Taser Helper", "Detenido")
 end
 
--- Crear botones estilo menú
-local function createButton(name, yPos, callback)
-    local button = Instance.new("TextButton", frame)
-    button.Size = UDim2.new(0.9, 0, 0, 36)
-    button.Position = UDim2.new(0.05, 0, 0, yPos)
-    button.Text = name
-    button.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
-    button.TextColor3 = Color3.fromRGB(230, 230, 230)
-    button.Font = Enum.Font.Gotham
-    button.TextSize = 18
-    button.BorderSizePixel = 0
-    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 12)
-    button.MouseButton1Click:Connect(callback)
-end
+-- 🔹 GUI Toggle
+local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+screenGui.Name = "TaserHelperGUI"
+screenGui.ResetOnSpawn = false
 
--- Botón de toggle principal
-createButton("▶ Start Taser", 60, function()
-    if running then stopTaser() else startTaser() end
+local frame = Instance.new("Frame", screenGui)
+frame.Size = UDim2.new(0, 150, 0, 50)
+frame.Position = UDim2.new(0.05, 0, 0.3, 0)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+frame.BorderSizePixel = 0
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+
+local toggleButton = Instance.new("TextButton", frame)
+toggleButton.Size = UDim2.new(1, -10, 1, -10)
+toggleButton.Position = UDim2.new(0, 5, 0, 5)
+toggleButton.Text = "🔴 OFF"
+toggleButton.Font = Enum.Font.GothamBold
+toggleButton.TextSize = 20
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
+Instance.new("UICorner", toggleButton).CornerRadius = UDim.new(0, 10)
+
+toggleButton.MouseButton1Click:Connect(function()
+    if running then
+        stopTaser()
+        toggleButton.Text = "🔴 OFF"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
+    else
+        startTaser()
+        toggleButton.Text = "🟢 ON"
+        toggleButton.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
+    end
 end)
