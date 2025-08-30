@@ -8,56 +8,71 @@ local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+local humanoid = character:WaitForChild("Humanoid")
 local plots = workspace:WaitForChild("Plots")
 
--- GUI Setup
+-- GUI Baru Setup
 local gui = Instance.new("ScreenGui", CoreGui)
 gui.Name = "PremiumDeliveryGUI"
 gui.ResetOnSpawn = false
 
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
-frame.Size = UDim2.new(0, 192, 0, 88) -- 20% lebih kecil dari 240x110
-frame.Position = UDim2.new(0, 30, 0.4, 0)
-frame.BackgroundColor3 = Color3.fromRGB(24, 24, 26)
+frame.Size = UDim2.new(0, 176, 0, 104)
+frame.Position = UDim2.new(0.1, 0, 0.1, 0)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 frame.BorderSizePixel = 0
-frame.BackgroundTransparency = 0.02
-frame.Parent = gui
 frame.Active = true
 frame.Draggable = true
+frame.Parent = gui
 
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
 
-local stroke = Instance.new("UIStroke", frame)
-stroke.Color = Color3.fromRGB(0, 180, 255)
-stroke.Thickness = 1.6
-stroke.Transparency = 0.1
-
+-- Judul
 local title = Instance.new("TextLabel", frame)
-title.Name = "TitleLabel"
-title.Size = UDim2.new(1, 0, 0, 24)
+title.Name = "Title"
+title.Size = UDim2.new(1, 0, 0, 25)
 title.Position = UDim2.new(0, 0, 0, 0)
 title.BackgroundTransparency = 1
-title.Text = "Instan Steal"
-title.Font = Enum.Font.GothamBlack
-title.TextColor3 = Color3.fromRGB(230, 230, 230)
-title.TextSize = 17
-title.TextStrokeTransparency = 0.8
+title.Text = "Steal Helper"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
 
+-- Garis bawah judul
+local garis = Instance.new("Frame", frame)
+garis.Size = UDim2.new(1, -20, 0, 1)
+garis.Position = UDim2.new(0, 10, 0, 25)
+garis.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+garis.BorderSizePixel = 0
+
+-- Tombol Toggle
 local toggleBtn = Instance.new("TextButton", frame)
 toggleBtn.Name = "ToggleButton"
-toggleBtn.Size = UDim2.new(1, -20, 0, 42)
-toggleBtn.Position = UDim2.new(0, 10, 0, 36)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-toggleBtn.Text = "Start"
-toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.TextSize = 15
+toggleBtn.Size = UDim2.new(0.90, 0, 0, 34) -- Dibesar 20% dari ukuran awal
+toggleBtn.Position = UDim2.new(0.05, 0, 0, 42) -- Disesuaikan agar tetap di tengah
+toggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
 toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleBtn.BorderSizePixel = 0
-Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
+toggleBtn.Font = Enum.Font.GothamSemibold
+toggleBtn.TextSize = 14
+toggleBtn.Text = "▶ Start"
+toggleBtn.AutoButtonColor = false
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
+--
+-- Hover Effect
+toggleBtn.MouseEnter:Connect(function()
+	toggleBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 90)
+end)
+toggleBtn.MouseLeave:Connect(function()
+	if active then
+		toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 120)
+	else
+		toggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
+	end
+end)
 
 -- Logic
-local speed = 42
+local speed = 35
 local arrived = false
 local active = false
 local jumpLoop = nil
@@ -106,8 +121,8 @@ local function runDelivery()
 	local myHitbox = findMyHitbox()
 	if not myHitbox then warn("Tidak menemukan DeliveryHitbox sendiri.") return end
 
-	local closestHitbox = getClosestHitbox(myHitbox, 50)
-	if not closestHitbox then warn("Tidak ada DeliveryHitbox lain dalam 50 studs.") return end
+	local closestHitbox = getClosestHitbox(myHitbox, 200)
+	if not closestHitbox then warn("Tidak ada DeliveryHitbox lain dalam jarak 200 studs.") return end
 
 	local currentGoal = closestHitbox.Position + Vector3.new(0, 3, 0)
 	local phase = "ToClosest"
@@ -115,64 +130,63 @@ local function runDelivery()
 
 	jumpLoop = task.spawn(function()
 		while active and not arrived do
-			if phase == "ToClosest" or phase == "ToMyBase" then
-				humanoidRootPart.Velocity = Vector3.new(humanoidRootPart.Velocity.X, 120, humanoidRootPart.Velocity.Z)
-				task.wait(phase == "ToClosest" and 0.5 or 1.5)
-			else
-				task.wait(0.5)
+			if humanoid.FloorMaterial ~= Enum.Material.Air then
+				humanoid.JumpPower = phase == "ToClosest" and 50 or 100
+				humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 			end
+			task.wait(0.3)
 		end
 	end)
 
 	moveConn = RunService.Heartbeat:Connect(function()
 		if not active or arrived then return end
-
 		if (humanoidRootPart.Position - currentGoal).Magnitude < 5 then
 			if phase == "ToClosest" then
 				phase = "ToMyBase"
 				currentGoal = myHitbox.Position + Vector3.new(0, 3, 0)
-			elseif phase == "ToMyBase" then
+			else
 				arrived = true
 				cleanup()
-
-				-- Auto Stop
 				active = false
-				toggleBtn.Text = "Start"
-				toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+				toggleBtn.Text = "▶ Start"
+				toggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
 			end
 			return
 		end
-
-		local direction = (currentGoal - humanoidRootPart.Position).Unit
-		humanoidRootPart.Velocity = Vector3.new(direction.X * speed, humanoidRootPart.Velocity.Y, direction.Z * speed)
+		local dir = (currentGoal - humanoidRootPart.Position).Unit
+		humanoidRootPart.Velocity = Vector3.new(dir.X * speed, humanoidRootPart.Velocity.Y, dir.Z * speed)
 	end)
 end
 
--- Toggle tombol
 toggleBtn.MouseButton1Click:Connect(function()
 	if active then
 		active = false
-		toggleBtn.Text = "Start"
-		toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+		toggleBtn.Text = "▶ Start"
+		toggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
 		cleanup()
 	else
-		if not humanoidRootPart then return warn("Karakter belum siap.") end
+		if not humanoidRootPart or not humanoid then return warn("Karakter belum siap.") end
 		active = true
 		arrived = false
-		toggleBtn.Text = "Stop"
-		toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
+		toggleBtn.Text = "■ Stop"
+		toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 120)
 		runDelivery()
 	end
 end)
 
--- Dengarkan respawn
 Players.LocalPlayer.CharacterAdded:Connect(function(newChar)
 	character = newChar
 	humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+	humanoid = character:WaitForChild("Humanoid")
 	cleanup()
-
-	if active then
-		task.wait(1)
-		runDelivery()
-	end
+	if active then task.wait(1) runDelivery() end
 end)
+
+
+
+        task.wait(1) -- beri jeda biar GUI keburu siap
+game:GetService("StarterGui"):SetCore("SendNotification", {
+	Title = "Equip Invisibility Cloak!",
+	Text = "The script only works if you equip Invisibility Cloak",
+	Duration = 4
+})
