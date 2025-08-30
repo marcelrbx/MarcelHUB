@@ -1,115 +1,164 @@
+-- LocalScript (pegar en StarterPlayerScripts o ejecutor como LocalScript)
 local Players = game:GetService("Players")
-local player = Players.LocalPlayer
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
-local RFCoinsShopServiceRequestBuy = ReplicatedStorage.Packages.Net["RF/CoinsShopService/RequestBuy"]
-local REUseItem = ReplicatedStorage.Packages.Net["RE/UseItem"]
+local player = Players.LocalPlayer
+local DEBUG = true -- ponlo true para ver prints en Output
+
+local function Dprint(...)
+    if DEBUG then print("[TASER DEBUG]", ...) end
+end
+
+-- Ajusta estos nombres si en tu juego son diferentes
+local RFCoinsShopServiceRequestBuy = ReplicatedStorage:FindFirstChild("Packages") and ReplicatedStorage.Packages:FindFirstChild("Net") and ReplicatedStorage.Packages.Net:FindFirstChild("RF/CoinsShopService/RequestBuy")
+local REUseItem = ReplicatedStorage:FindFirstChild("Packages") and ReplicatedStorage.Packages:FindFirstChild("Net") and ReplicatedStorage.Packages.Net:FindFirstChild("RE/UseItem")
 
 local running = false
 local toolName = "Taser Gun"
-local activePrompts = {}
-local holdDetected = {}
 
--- 🔹 Funciones
+-- trackedPrompts[prompt] = { handled = false }
+local trackedPrompts = {}
+
+-- Compra y equipa (verifica si ya existe)
 local function buyAndEquip()
-    local success, result = pcall(function()
-        return RFCoinsShopServiceRequestBuy:InvokeServer(toolName)
-    end)
-    if not success then warn("Error al comprar:", result) end
+    -- Si no existe el RemoteFunction, solo intentamos equipar si ya lo tienes
+    local tool = player.Backpack:FindFirstChild(toolName) or (player.Character and player.Character:FindFirstChild(toolName))
+    if not tool and RFCoinsShopServiceRequestBuy then
+        local ok, res = pcall(function()
+            return RFCoinsShopServiceRequestBuy:InvokeServer(toolName)
+        end)
+        if not ok then warn("Error al comprar:", res) end
+        task.wait(0.5)
+        tool = player.Backpack:FindFirstChild(toolName) or (player.Character and player.Character:FindFirstChild(toolName))
+    end
 
-    task.wait(0.5)
-    local tool = player.Backpack:FindFirstChild(toolName)
-    if tool then player.Character.Humanoid:EquipTool(tool) end
+    if tool and player.Character and player.Character:FindFirstChild("Humanoid") then
+        player.Character.Humanoid:EquipTool(tool)
+        Dprint("Taser equipado")
+    else
+        Dprint("No se encontró Taser para equipar")
+    end
 end
 
+-- Usa el taser y teletransporta (cuidado con anticheats)
 local function useTaserAndTeleport()
     local char = player.Character or player.CharacterAdded:Wait()
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if hrp then
-        REUseItem:FireServer(hrp)
+        Dprint("Usando taser y teletransportando...")
+        pcall(function()
+            if REUseItem then
+                -- Algunos juegos esperan distintos argumentos; este es el que usabas
+                REUseItem:FireServer(hrp)
+            end
+        end)
+        -- Teletransporte directo (si quieres más "suave" usar TweenService / Humanoid:MoveTo)
         hrp.CFrame = hrp.CFrame + hrp.CFrame.LookVector * 20
     end
 end
 
--- 🔹 Agregar ProximityPrompt válido
+-- Registra un prompt para seguimiento (solo los que coincidan con "steal")
 local function addPrompt(prompt)
-    if prompt:IsA("ProximityPrompt") and prompt.ActionText == "Steal" and not activePrompts[prompt] then
-        activePrompts[prompt] = prompt
-        holdDetected[prompt] = false
-        prompt.Triggered:Connect(function(plr)
-            if plr == player then
-                holdDetected[prompt] = true
+    if not prompt or not prompt:IsA("ProximityPrompt") then return end
+    if trackedPrompts[prompt] then return end
+
+    -- Filtro por ActionText: hazlo más laxo si necesitas detectar todo
+    local action = tostring(prompt.ActionText or "")
+    if not string.find(action:lower(), "steal") then
+        -- Si quieres detectar todos, comenta la siguiente línea
+        return
+    end
+
+    trackedPrompts[prompt] = { handled = false }
+    Dprint("Prompt añadido:", prompt, "ActionText=", action, "HoldDuration=", prompt.HoldDuration, "Parent=", prompt.Parent and prompt.Parent:GetFullName())
+
+    -- Si el prompt es instantáneo (HoldDuration == 0) → usar Triggered
+    prompt.Triggered:Connect(function(plr)
+        if plr == player then
+            local state = trackedPrompts[prompt]
+            if state and not state.handled then
+                state.handled = true
+                useTaserAndTeleport()
+                task.delay(0.5, function()
+                    if trackedPrompts[prompt] then trackedPrompts[prompt].handled = false end
+                end)
             end
-        end)
-    end
-end
-
--- 🔹 Buscar prompts en un modelo o carpeta recursivamente
-local function scanForPrompts(parent)
-    for _, obj in pairs(parent:GetDescendants()) do
-        addPrompt(obj)
-    end
-end
-
--- 🔹 Escanear lugares específicos
-local function scanSpecificZones()
-    if workspace:FindFirstChild("Plots") then
-        for _, model in pairs(workspace.Plots:GetChildren()) do
-            scanForPrompts(model)
         end
-    end
+    end)
+end
 
-    if workspace:FindFirstChild("AnimalPodiums") then
-        for _, model in pairs(workspace.AnimalPodiums:GetChildren()) do
-            scanForPrompts(model)
-        end
-    end
-
-    if workspace:FindFirstChild("Base") then
-        scanForPrompts(workspace.Base)
-    end
-
-    if workspace:FindFirstChild("Spawn") then
-        scanForPrompts(workspace.Spawn)
+local function removePrompt(prompt)
+    if trackedPrompts[prompt] then
+        Dprint("Prompt removido:", prompt)
+        trackedPrompts[prompt] = nil
     end
 end
 
--- 🔹 Loop principal para revisar hold
+-- Escaneo inicial (ligero)
+for _, obj in pairs(workspace:GetDescendants()) do
+    pcall(function() addPrompt(obj) end)
+end
+
+-- Mantener la lista actualizada
+workspace.DescendantAdded:Connect(function(obj)
+    pcall(function()
+        if obj:IsA("ProximityPrompt") then
+            addPrompt(obj)
+        end
+    end)
+end)
+workspace.DescendantRemoving:Connect(function(obj)
+    pcall(function()
+        if obj:IsA("ProximityPrompt") then
+            removePrompt(obj)
+        end
+    end)
+end)
+
+-- Loop que revisa progreso en prompts con HoldDuration > 0
 RunService.Heartbeat:Connect(function()
-    if running then
-        scanSpecificZones()
-        for _, prompt in pairs(activePrompts) do
-            if prompt and prompt.Parent then
-                if prompt:IsHeld() and not holdDetected[prompt] then
-                    local progress = prompt:GetHoldProgress()
-                    if progress >= 1 - (0.3 / prompt.HoldDuration) then
-                        holdDetected[prompt] = true
-                        useTaserAndTeleport()
+    if not running then return end
+    for prompt, state in pairs(trackedPrompts) do
+        if prompt and prompt.Parent then
+            local hd = tonumber(prompt.HoldDuration) or 0
+            if hd > 0 then
+                -- solo si alguien lo mantiene
+                if prompt:IsHeld() and not state.handled then
+                    local ok, progress = pcall(function() return prompt:GetHoldProgress() end)
+                    if ok and type(progress) == "number" then
+                        -- Umbral: 0.3s antes de terminar, protegido contra división por cero
+                        local threshold = 1 - (0.3 / math.max(hd, 0.001))
+                        threshold = math.clamp(threshold, 0, 1)
+                        if progress >= threshold then
+                            state.handled = true
+                            useTaserAndTeleport()
+                            task.delay(0.5, function()
+                                if trackedPrompts[prompt] then trackedPrompts[prompt].handled = false end
+                            end)
+                        end
                     end
-                elseif not prompt:IsHeld() then
-                    holdDetected[prompt] = false
                 end
             end
+        else
+            -- prompt inválido -> limpiar
+            trackedPrompts[prompt] = nil
         end
     end
 end)
 
--- 🔹 Iniciar / Detener
+-- Start / Stop
 local function startTaser()
     running = true
-    activePrompts = {}
-    holdDetected = {}
     buyAndEquip()
+    Dprint("Sistema TASER activado")
 end
-
 local function stopTaser()
     running = false
-    activePrompts = {}
-    holdDetected = {}
+    Dprint("Sistema TASER desactivado")
 end
 
--- 🔹 GUI Toggle
+-- GUI (igual que la tuya, pero con debug)
 local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 screenGui.Name = "TaserToggleGUI"
 screenGui.ResetOnSpawn = false
