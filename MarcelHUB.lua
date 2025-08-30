@@ -1,192 +1,107 @@
 -- Hapus GUI lama jika ada
-pcall(function() game.CoreGui:FindFirstChild("PremiumDeliveryGUI"):Destroy() end)
+pcall(function()
+	game.CoreGui:FindFirstChild("StealHelper"):Destroy()
+end)
 
--- Ambil service dan data pemain
+-- Ambil service
 local CoreGui = game:GetService("CoreGui")
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-local humanoid = character:WaitForChild("Humanoid")
-local plots = workspace:WaitForChild("Plots")
 
--- GUI Baru Setup
-local gui = Instance.new("ScreenGui", CoreGui)
-gui.Name = "PremiumDeliveryGUI"
+-- GUI Utama
+local gui = Instance.new("ScreenGui")
+gui.Name = "StealHelper"
 gui.ResetOnSpawn = false
+gui.Parent = CoreGui
 
+-- Efek Bayangan Luar
+local shadow = Instance.new("Frame")
+shadow.Size = UDim2.new(0, 240, 0, 220)
+shadow.Position = UDim2.new(0.5, -120, 0.5, -110)
+shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+shadow.BackgroundTransparency = 0.4
+shadow.BorderSizePixel = 0
+shadow.ZIndex = 0
+shadow.Parent = gui
+
+local shadowCorner = Instance.new("UICorner", shadow)
+shadowCorner.CornerRadius = UDim.new(0, 20)
+
+-- Frame Utama
 local frame = Instance.new("Frame")
-frame.Name = "MainFrame"
-frame.Size = UDim2.new(0, 176, 0, 104)
-frame.Position = UDim2.new(0.1, 0, 0.1, 0)
-frame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+frame.Size = UDim2.new(0, 240, 0, 220)
+frame.Position = UDim2.new(0.5, -120, 0.5, -110)
+frame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 frame.BorderSizePixel = 0
-frame.Active = true
-frame.Draggable = true
+frame.ZIndex = 1
 frame.Parent = gui
 
-Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
+local corner = Instance.new("UICorner", frame)
+corner.CornerRadius = UDim.new(0, 20)
 
 -- Judul
-local title = Instance.new("TextLabel", frame)
-title.Name = "Title"
-title.Size = UDim2.new(1, 0, 0, 25)
-title.Position = UDim2.new(0, 0, 0, 0)
-title.BackgroundTransparency = 1
-title.Text = "Steal Helper"
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -20, 0, 40)
+title.Position = UDim2.new(0, 10, 0, 4)
+title.Text = "Steal Helper | choose "
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.BackgroundTransparency = 1
 title.Font = Enum.Font.GothamBold
-title.TextSize = 16
+title.TextSize = 22
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.ZIndex = 2
+title.Parent = frame
 
 -- Garis bawah judul
-local garis = Instance.new("Frame", frame)
-garis.Size = UDim2.new(1, -20, 0, 1)
-garis.Position = UDim2.new(0, 10, 0, 25)
-garis.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-garis.BorderSizePixel = 0
+local underline = Instance.new("Frame")
+underline.Size = UDim2.new(1, -20, 0, 1)
+underline.Position = UDim2.new(0, 10, 0, 44)
+underline.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+underline.BorderSizePixel = 0
+underline.ZIndex = 1
+underline.Parent = frame
 
--- Tombol Toggle
-local toggleBtn = Instance.new("TextButton", frame)
-toggleBtn.Name = "ToggleButton"
-toggleBtn.Size = UDim2.new(0.90, 0, 0, 34) -- Dibesar 20% dari ukuran awal
-toggleBtn.Position = UDim2.new(0.05, 0, 0, 42) -- Disesuaikan agar tetap di tengah
-toggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
-toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleBtn.Font = Enum.Font.GothamSemibold
-toggleBtn.TextSize = 14
-toggleBtn.Text = "▶ Start"
-toggleBtn.AutoButtonColor = false
-Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
---
--- Hover Effect
-toggleBtn.MouseEnter:Connect(function()
-	toggleBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 90)
-end)
-toggleBtn.MouseLeave:Connect(function()
-	if active then
-		toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 120)
-	else
-		toggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
-	end
-end)
+-- Fungsi untuk membuat tombol gaya modern
+local function createButton(name, yPos, callback)
+	local button = Instance.new("TextButton")
+	button.Size = UDim2.new(0.9, 0, 0, 36)
+	button.Position = UDim2.new(0.05, 0, 0, yPos)
+	button.Text = name
+	button.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+	button.TextColor3 = Color3.fromRGB(230, 230, 230)
+	button.Font = Enum.Font.Gotham
+	button.TextSize = 18
+	button.BorderSizePixel = 0
+	button.AutoButtonColor = true
+	button.ZIndex = 2
+	button.Parent = frame
 
--- Logic
-local speed = 35
-local arrived = false
-local active = false
-local jumpLoop = nil
-local moveConn = nil
+	local buttonCorner = Instance.new("UICorner", button)
+	buttonCorner.CornerRadius = UDim.new(0, 12)
 
-local function getClosestHitbox(excludeHitbox, maxDistance)
-	local closest = nil
-	local shortest = maxDistance
-	for _, base in pairs(plots:GetChildren()) do
-		if base:IsA("Model") then
-			local deliveryHitbox = base:FindFirstChild("DeliveryHitbox", true)
-			if deliveryHitbox and deliveryHitbox ~= excludeHitbox then
-				local dist = (humanoidRootPart.Position - deliveryHitbox.Position).Magnitude
-				if dist < shortest then
-					shortest = dist
-					closest = deliveryHitbox
-				end
-			end
-		end
-	end
-	return closest
-end
+	local uiStroke = Instance.new("UIStroke", button)
+	uiStroke.Thickness = 1
+	uiStroke.Color = Color3.fromRGB(80, 80, 100)
+	uiStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 
-local function findMyHitbox()
-	for _, base in pairs(plots:GetChildren()) do
-		if base:IsA("Model") then
-			for _, desc in pairs(base:GetDescendants()) do
-				if desc:IsA("TextLabel") and (string.find(desc.Text, player.Name) or string.find(desc.Text, player.DisplayName)) then
-					return base:FindFirstChild("DeliveryHitbox", true)
-				end
-			end
-		end
-	end
-end
-
-local function cleanup()
-	arrived = true
-	if jumpLoop then task.cancel(jumpLoop) jumpLoop = nil end
-	if moveConn then moveConn:Disconnect() moveConn = nil end
-	if humanoidRootPart then
-		humanoidRootPart.Velocity = Vector3.zero
-	end
-end
-
-local function runDelivery()
-	local myHitbox = findMyHitbox()
-	if not myHitbox then warn("Tidak menemukan DeliveryHitbox sendiri.") return end
-
-	local closestHitbox = getClosestHitbox(myHitbox, 200)
-	if not closestHitbox then warn("Tidak ada DeliveryHitbox lain dalam jarak 200 studs.") return end
-
-	local currentGoal = closestHitbox.Position + Vector3.new(0, 3, 0)
-	local phase = "ToClosest"
-	arrived = false
-
-	jumpLoop = task.spawn(function()
-		while active and not arrived do
-			if humanoid.FloorMaterial ~= Enum.Material.Air then
-				humanoid.JumpPower = phase == "ToClosest" and 50 or 100
-				humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-			end
-			task.wait(0.3)
-		end
+	-- Hover effect
+	button.MouseEnter:Connect(function()
+		button.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+	end)
+	button.MouseLeave:Connect(function()
+		button.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
 	end)
 
-	moveConn = RunService.Heartbeat:Connect(function()
-		if not active or arrived then return end
-		if (humanoidRootPart.Position - currentGoal).Magnitude < 5 then
-			if phase == "ToClosest" then
-				phase = "ToMyBase"
-				currentGoal = myHitbox.Position + Vector3.new(0, 3, 0)
-			else
-				arrived = true
-				cleanup()
-				active = false
-				toggleBtn.Text = "▶ Start"
-				toggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
-			end
-			return
-		end
-		local dir = (currentGoal - humanoidRootPart.Position).Unit
-		humanoidRootPart.Velocity = Vector3.new(dir.X * speed, humanoidRootPart.Velocity.Y, dir.Z * speed)
-	end)
+	button.MouseButton1Click:Connect(callback)
 end
 
-toggleBtn.MouseButton1Click:Connect(function()
-	if active then
-		active = false
-		toggleBtn.Text = "▶ Start"
-		toggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
-		cleanup()
-	else
-		if not humanoidRootPart or not humanoid then return warn("Karakter belum siap.") end
-		active = true
-		arrived = false
-		toggleBtn.Text = "■ Stop"
-		toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 120)
-		runDelivery()
-	end
+-- Tambahkan tombol
+createButton("Base Flor 1", 60, function()
+	loadstring(game:HttpGet("https://raw.githubusercontent.com/NabaruBrainrot/Tempat-Penyimpanan-Roblox-Brainrot-/refs/heads/main/Instan%20Steal%20Normal"))()
 end)
 
-Players.LocalPlayer.CharacterAdded:Connect(function(newChar)
-	character = newChar
-	humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-	humanoid = character:WaitForChild("Humanoid")
-	cleanup()
-	if active then task.wait(1) runDelivery() end
+createButton("Base Flor 2", 110, function()
+	loadstring(game:HttpGet("https://raw.githubusercontent.com/NabaruBrainrot/Tempat-Penyimpanan-Roblox-Brainrot-/refs/heads/main/Steal%20Helper%20Flor%202"))()
 end)
 
-
-
-        task.wait(1) -- beri jeda biar GUI keburu siap
-game:GetService("StarterGui"):SetCore("SendNotification", {
-	Title = "Equip Invisibility Cloak!",
-	Text = "The script only works if you equip Invisibility Cloak",
-	Duration = 4
-})
+createButton("Base Flor 3", 160, function()
+	loadstring(game:HttpGet("https://pastebin.com/raw/zzzzzFlor3"))()
+end)
